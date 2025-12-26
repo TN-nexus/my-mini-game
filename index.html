@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Simple Suika Game</title>
+  <style>
+    body {
+      margin: 0;
+      background: #222;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    canvas {
+      background: #fafafa;
+      touch-action: manipulation;
+    }
+  </style>
+</head>
+<body>
+<canvas id="game" width="360" height="640"></canvas>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+const GRAVITY = 0.3;
+const FLOOR = canvas.height - 10;
+
+const COLORS = ["#ff7675", "#74b9ff", "#55efc4", "#ffeaa7"];
+const RADIUS = [12, 18, 26, 36];
+
+let balls = [];
+let nextType = 0;
+
+function spawnBall(x) {
+  balls.push({
+    x: x,
+    y: 30,
+    vy: 0,
+    type: nextType
+  });
+  nextType = Math.floor(Math.random() * 2);
+}
+
+canvas.addEventListener("pointerdown", e => {
+  const rect = canvas.getBoundingClientRect();
+  spawnBall(e.clientX - rect.left);
+});
+
+function update() {
+  for (let b of balls) {
+    b.vy += GRAVITY;
+    b.y += b.vy;
+
+    if (b.y + RADIUS[b.type] > FLOOR) {
+      b.y = FLOOR - RADIUS[b.type];
+      b.vy = 0;
+    }
+  }
+
+  // collision & merge
+  for (let i = 0; i < balls.length; i++) {
+    for (let j = i + 1; j < balls.length; j++) {
+      const a = balls[i];
+      const b = balls[j];
+      if (a.type !== b.type) continue;
+
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      const dist = Math.hypot(dx, dy);
+      const minDist = RADIUS[a.type] * 2;
+
+      if (dist < minDist && a.type < RADIUS.length - 1) {
+        balls.splice(j, 1);
+        balls.splice(i, 1);
+        balls.push({
+          x: (a.x + b.x) / 2,
+          y: (a.y + b.y) / 2,
+          vy: 0,
+          type: a.type + 1
+        });
+        return;
+      }
+    }
+  }
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // floor
+  ctx.fillStyle = "#333";
+  ctx.fillRect(0, FLOOR, canvas.width, 10);
+
+  for (let b of balls) {
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, RADIUS[b.type], 0, Math.PI * 2);
+    ctx.fillStyle = COLORS[b.type];
+    ctx.fill();
+  }
+}
+
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+</body>
+</html>
