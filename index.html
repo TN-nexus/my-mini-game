@@ -1,115 +1,102 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Simple Suika Game</title>
-  <style>
-    body {
-      margin: 0;
-      background: #222;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-    }
-    canvas {
-      background: #fafafa;
-      touch-action: manipulation;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ring</title>
+    <style>
+        body { font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", sans-serif; background-color: #f0f2f5; margin: 0; display: flex; justify-content: center; height: 100vh; }
+        #app { width: 100%; max-width: 500px; background: white; display: flex; flex-direction: column; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        #image-area { width: 100%; height: 40%; background: #333; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.8em; }
+        #content { flex: 1; padding: 20px; overflow-y: auto; line-height: 1.6; }
+        #controls { padding: 20px; border-top: 1px solid #eee; display: flex; flex-direction: column; gap: 10px; }
+        button { padding: 15px; border: none; border-radius: 25px; background-color: #06C755; color: white; font-weight: bold; cursor: pointer; font-size: 1em; transition: opacity 0.2s; }
+        button:active { opacity: 0.7; }
+        .game-over { background-color: #dc3545; }
+        .clear { background-color: #007bff; }
+    </style>
 </head>
 <body>
-<canvas id="game" width="360" height="640"></canvas>
+<div id="app">
+    <div id="image-area">ここに挿絵を表示（img1.jpgなど）</div>
+    <div id="content">
+        <h2 id="title"></h2>
+        <p id="text"></p>
+    </div>
+    <div id="controls"></div>
+</div>
 
 <script>
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
-
-const GRAVITY = 0.3;
-const FLOOR = canvas.height - 10;
-
-const COLORS = ["#ff7675", "#74b9ff", "#55efc4", "#ffeaa7"];
-const RADIUS = [12, 18, 26, 36];
-
-let balls = [];
-let nextType = 0;
-
-function spawnBall(x) {
-  balls.push({
-    x: x,
-    y: 30,
-    vy: 0,
-    type: nextType
-  });
-  nextType = Math.floor(Math.random() * 2);
-}
-
-canvas.addEventListener("pointerdown", e => {
-  const rect = canvas.getBoundingClientRect();
-  spawnBall(e.clientX - rect.left);
-});
-
-function update() {
-  for (let b of balls) {
-    b.vy += GRAVITY;
-    b.y += b.vy;
-
-    if (b.y + RADIUS[b.type] > FLOOR) {
-      b.y = FLOOR - RADIUS[b.type];
-      b.vy = 0;
+// --- シナリオデータ（JSON形式） ---
+const scenario = {
+    "start": {
+        "title": "暗い洞窟",
+        "text": "勇者よ、目を覚ましてください。あなたは冷たい石畳の上に倒れていました。目の前には、薄暗い洞窟の奥へと続く道があります。",
+        "options": [
+            { "text": "奥へ進む", "next": "encounter" }
+        ]
+    },
+    "encounter": {
+        "title": "遭遇",
+        "text": "恐ろしいモンスターが現れた！鋭い牙を剥き出しにして、あなたを威嚇しています。どうしますか？",
+        "options": [
+            { "text": "戦う", "next": "gameover" },
+            { "text": "逃げる", "next": "clear" }
+        ]
+    },
+    "gameover": {
+        "title": "GAME OVER",
+        "text": "あなたは勇敢に立ち向かいましたが、武器も持たない身では太刀打ちできませんでした…。あなたの旅はここで終わりました。",
+        "options": [
+            { "text": "最初からやり直す", "next": "start", "class": "game-over" }
+        ]
+    },
+    "clear": {
+        "title": "CLEAR!",
+        "text": "あなたは全速力で逃げ出しました！背後にモンスターの咆哮を聞きながら、光の差す出口へと飛び出しました。勇者の物語はここから始まります。",
+        "options": [
+            { "text": "もう一度遊ぶ", "next": "start", "class": "clear" }
+        ]
     }
-  }
+};
 
-  // collision & merge
-  for (let i = 0; i < balls.length; i++) {
-    for (let j = i + 1; j < balls.length; j++) {
-      const a = balls[i];
-      const b = balls[j];
-      if (a.type !== b.type) continue;
+// --- ゲームエンジン ---
+function renderScene(sceneId) {
+    const scene = scenario[sceneId];
+    document.getElementById('title').innerText = scene.title;
+    document.getElementById('text').innerText = scene.text;
+    
+    // 挿絵のダミー表示（画像があればここでsrcを切り替える）
+    document.getElementById('image-area').innerText = `【挿絵：${scene.title}】`;
 
-      const dx = a.x - b.x;
-      const dy = a.y - b.y;
-      const dist = Math.hypot(dx, dy);
-      const minDist = RADIUS[a.type] * 2;
-
-      if (dist < minDist && a.type < RADIUS.length - 1) {
-        balls.splice(j, 1);
-        balls.splice(i, 1);
-        balls.push({
-          x: (a.x + b.x) / 2,
-          y: (a.y + b.y) / 2,
-          vy: 0,
-          type: a.type + 1
-        });
-        return;
-      }
-    }
-  }
+    const controls = document.getElementById('controls');
+    controls.innerHTML = ''; // ボタンをクリア
+    
+    scene.options.forEach(opt => {
+        const btn = document.createElement('button');
+        btn.innerText = opt.text;
+        if(opt.class) btn.className = opt.class;
+        btn.onclick = () => {
+            saveProgress(opt.next);
+            renderScene(opt.next);
+        };
+        controls.appendChild(btn);
+    });
 }
 
-function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // floor
-  ctx.fillStyle = "#333";
-  ctx.fillRect(0, FLOOR, canvas.width, 10);
-
-  for (let b of balls) {
-    ctx.beginPath();
-    ctx.arc(b.x, b.y, RADIUS[b.type], 0, Math.PI * 2);
-    ctx.fillStyle = COLORS[b.type];
-    ctx.fill();
-  }
+// セーブ機能（LocalStorage）
+function saveProgress(sceneId) {
+    localStorage.setItem('ring_game_progress', sceneId);
 }
 
-function loop() {
-  update();
-  draw();
-  requestAnimationFrame(loop);
+function loadProgress() {
+    return localStorage.getItem('ring_game_progress') || 'start';
 }
 
-loop();
+// 起動
+const lastScene = loadProgress();
+renderScene(lastScene);
+
 </script>
 </body>
 </html>
